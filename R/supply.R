@@ -56,12 +56,19 @@ pb_supply <- function(data,
                       domain = NULL,
                       status = NULL,
                       collected_at = lubridate::now()) {
+  pb_supply_abort <- function(x) cli::cli_abort("No data rows provided.",
+                                                .envir = paperboy.env
+  )
+  pb_supply_warn <- function(x) cli::cli_warn("No data rows provided.",
+                                              .envir = paperboy.env
+  )
+
+
+  if (nrow(data) == 0) pb_supply_abort("No data rows provided.")
 
   if ((is.null(content_raw) & is.null(content_filenames)) |
       (!is.null(content_raw) & !is.null(content_filenames))) {
-        cli::cli_abort("Exactly one of content_raw and content_filenames must be provided.",
-                       .envir = paperboy.env
-        )
+        pb_supply_abort("Exactly one of content_raw and content_filenames must be provided.")
   }
   # Note that pb_deliver() doesn't actually use the encoded paperboy_data_loc
   # attribute, relying on rvest::parse_html() being happy to accept either
@@ -74,12 +81,8 @@ pb_supply <- function(data,
     loc <- "disk"
     content <- content_filenames
   }
-  if (is.null(data[[content]])) {
-    cli::cli_abort("content_raw or content_filenames is not a valid column.",
-                   .envir = paperboy.env
-    )
-  }
 
+  if (is.null(data[[content]])) pb_supply_abort("content_raw or content_filenames is not a valid column.")
 
   if (is.null(expanded_url)) {
     expanded_url <- "expanded_url"
@@ -90,43 +93,27 @@ pb_supply <- function(data,
     # can supply their own column.
     norm_url <- function(u) curl::curl_parse_url(u, default_scheme=TRUE)[["url"]]
     data[[expanded_url]] <- sapply(data[[url]], norm_url)
-  } else if (is.null(data[[expanded_url]])) {
-    cli::cli_abort("expanded_url is not a valid column.",
-                   .envir = paperboy.env
-    )
-  }
+  } else if (is.null(data[[expanded_url]])) pb_supply_abort("expanded_url is not a valid column.")
 
   if (is.null(domain)) {
     domain <- "domain"
     data[[domain]] <- adaR::ada_get_domain(data[[expanded_url]])
-  } else if (is.null(data[[domain]])) {
-    cli::cli_abort("domain is not a valid column.",
-                   .envir = paperboy.env
-    )
-  }
+  } else if (is.null(data[[domain]])) pb_supply_abort("domain is not a valid column.")
 
   if (is.null(status)) {
     status <- "status"
     data[[status]] <- 200L
-  } else if (is.null(data[[status]])) {
-    cli::cli_abort("status is not a valid column.",
-                   .envir = paperboy.env
-    )
-  }
+  } else if (is.null(data[[status]])) pb_supply_abort("status is not a valid column.")
 
   if (any(sapply(c(url, content, expanded_url, domain, status, collected_at),
                  length) != 1)) {
-    cli::cli_abort("All parameters supplied to pb_supply() must be length 1.",
-                  .envir = paperboy.env
-    )
+    pb_supply_abort("All parameters supplied to pb_supply() must be length 1.")
   }
 
   if (nrow(data) != length(unique(data[[url]]))) {
     paperboy.env$len_urls <- nrow(data)
     paperboy.env$len_unique_urls <- length(unique(data[[url]]))
-    cli::cli_warn("Only {len_urls} of {len_unique_urls} supplied are unique. Processing duplicates anyway.",
-                  .envir = paperboy.env
-    )
+    pb_supply_warn("Only {len_urls} of {len_unique_urls} supplied are unique. Processing duplicates anyway.")
   }
 
   # We do some class-checking here to attempt to guarantee that the outbound
@@ -136,13 +123,10 @@ pb_supply <- function(data,
   # of pb_collect's current behaviour we would be rude to give them something
   # else (and bugs/crashes as a result of time format differences are all too
   # common).
-  if (!(inherits(collected_at, "POSIXct"))) {
-    cli::cli_abort("Only a POSIXct time is valid for collected_at.",
-                   .envir = paperboy.env)
-  }
+  if (!(inherits(collected_at, "POSIXct"))) pb_supply_abort("Only a POSIXct time is valid for collected_at.")
   # If we have integers (or something that coerces cleanly to them) then fine.
   if (all(data[[status]] != as.integer(data[[status]]))) {
-    cli::cli_warn("Only integer values are valid for statuses. Coercing anyway.",
+    pb_supply_warn("Only integer values are valid for statuses. Coercing anyway.",
                    .envir = paperboy.env)
   }
   data[[status]] <- as.integer(data[[status]])
